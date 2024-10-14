@@ -1,0 +1,40 @@
+import os
+import csv
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+os.chdir('/Users/alicja/Desktop')
+orders = 'H0', 'H1', 'H2', 'V1', 'V2','V3','V4','V5','V6','T'
+cy5 = pd.read_csv('egl-18_in_triple_hox_cy5.csv', header = 0)
+red = pd.read_csv('elt-1_in_triple_hox_RED.csv', header = 0)
+sns.boxplot(x='Cell', y= 'mRNA', data = cy5, order = orders, orient = 'v')
+
+#plt.show()
+#to calculate ratios between red and cy5
+cy5_list =[]
+red_list =[]
+ratio_list = []
+
+"""
+for cells in orders:
+    for worm in range(cy5['Worm'].max()):
+        a = cy5[cy5['Worm'] == worm]
+        a = a[a['Cell']==cells]
+        a = a.values()
+        cy5_list.append(a)
+        b = red[red['Worm'] == worm]
+        b = b[b['Cell']==cells]
+        b = b.item()
+        red_list.append(b)
+        c = int(a)/int(b)
+        ratio_list.append(c)
+"""
+for cells in orders:
+    #for worm in range(cy5['Worm'].max()):
+    for worm in range(2):
+        a = cy5[cy5['Worm'] == worm]
+        a = a[a['Cell']==cells]
+        a = a['mRNA'].values
+        print(a)
+        #cy5_list.append(a,ignore_index=True)
+        #print(cy5_list)

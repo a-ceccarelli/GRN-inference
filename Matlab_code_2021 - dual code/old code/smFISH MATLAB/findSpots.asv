@@ -1,0 +1,129 @@
+%%
+function findSpots (n_expt, path, channels) 
+
+%%
+% clear all
+% channels={'alexa','Cy5'};
+% path='E:/Jeroen/11-10-2009/lin-12_A594_hlh-3_Cy5_N2_24_40hr/';
+% 
+% n_expt=11;
+
+%% load filtered data
+
+ana_path=[path '/analyzed/'];
+
+infile=sprintf('filteredSpotData%04d.mat', n_expt);
+% load([ana_path infile], 'data_filtered', 'spotHist');
+load([ana_path infile], 'data_filtered', 'ROI_BB');
+
+%% load thresholds
+
+infile=sprintf('spotThresholds%04d.mat', n_expt);
+load([ana_path infile], 'spotThreshold');
+
+%%
+
+for i=1:length(channels)
+
+    %% find regional intensity maxima
+    for z=1:size(data_filtered(i).im,3)
+
+        % only accept pixel that are above the threshold
+        tmp=double(data_filtered(i).im(:,:,z));
+        bwl = tmp>spotThreshold(i);
+        tmp=bwl.*tmp;
+
+        % find regional maxima to separate spots that touch
+        % if there are non-zero pixels, find regional max
+        if ~isempty( find(tmp>0) ) 
+            rm(:,:,z)=imregionalmax(tmp);
+        else
+            % oherwise, just leave as all zeroes
+            rm(:,:,z)=tmp;
+        end
+
+    %     subplot(2,1,1), imshow(mat2gray(tmp))
+    %     subplot(2,1,2), imshow(rm(:,:,z))
+    %     getframe
+    end
+
+    %% find coordinates of the regional maxima
+    [lab,n] = bwlabeln(rm);
+    rp=regionprops(lab,'Centroid');
+
+    if length(rp)>0
+        for j=1:length(rp)
+            spotCoordinates(i).data(j,:)=rp(j).Centroid;
+        end
+
+        % convert spot (x,y) coordinates from ROI coordinates to full image coordinates
+        for j=1:2
+            spotCoordinates(i).data(:,j)=spotCoordinates(i).data(:,j)+ROI_BB(j)-1;
+        end
+    else
+        spotCoordinates(i).data=[];
+    end
+    fprintf('done \n'); 
+    
+end
+
+%% find spots using thresholds given by user
+
+fprintf('\t#%d -- Finding spot coordinates\n', n_expt); 
+
+clear spotCoordinates;
+for i=1:length(channels)
+
+    fprintf('\t\t%s: ', channels{i}); 
+
+    %% apply ROI to filtered data and normalize
+    tmp=double(data_filtered(i).im);
+    for j=1:size(tmp,3)
+        tmp(:,:,j)=tmp(:,:,j).*im_ROI;
+    end
+
+    %% find spots
+
+    % first apply user-defined threshold
+    bwl = tmp>spotThreshold(i);
+    % select filtered image data when above threshold
+    tmp=bwl.*tmp;
+    %% seems to cause OUT OF MEMORY for larger images, in that case Matlab
+    %% restart helps
+    
+    % find regional maxima to separate spots that touch
+    for j=1:size(tmp,3)
+        % if there are non-zero pixels, find regional max
+        if (~isempty( find(tmp(:,:,j)>0) ) )
+            rm(:,:,j)=imregionalmax(tmp(:,:,j));
+        else
+            % oherwise, just leave as all zeroes
+            rm(:,:,j)=tmp(:,:,j);
+        end
+    end
+    % find regional maxima and their coordinates
+    [lab,n] = bwlabeln(rm);
+    rp=regionprops(lab,'Centroid');
+    
+    if length(rp)>0
+        for j=1:length(rp)
+            spotCoordinates(i).data(j,:)=rp(j).Centroid;
+        end
+
+        %% convert spot (x,y) coordinates from ROI coordinates to full image coordinates
+        for j=1:2
+            spotCoordinates(i).data(:,j)=spotCoordinates(i).data(:,j)+ROI_BB(j)-1;
+        end
+    else
+        spotCoordinates(i).data=[];
+    end
+    fprintf('done \n'); 
+
+end
+
+%% save spot data
+
+fprintf('\t#%d -- Saving spot coordinates\n\n', n_expt); 
+
+outfile=sprintf('spotCoordinates%04d.mat', n_expt);
+save([ana_path outfile], 'spotCoordinates');

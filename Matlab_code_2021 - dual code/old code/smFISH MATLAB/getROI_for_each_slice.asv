@@ -1,0 +1,170 @@
+% this routine gets a ROI for spots for each individual slice in a stack
+
+function ROI_data = getROI_for_each_slice(data, ROI_data, range, mag, z0, thresholds)
+
+    % initialze variables
+    Nz=size(data(1).im,3);
+    chn=2;
+    cont=1;
+    z=z0;
+
+    % find coordinates for clipping image
+    im_ind=[];
+    for i=1:2
+        S=size(data(1).im,i);
+        im_ind{i}=max(range(i,1),1):min(range(i,2),S(1));
+    end
+
+    % if ROI already exists, transfer to clipped image coordinates
+    for i=1:Nz
+        if ~isempty(ROI_data{i}.ROI)
+            ROI_data{i}.ROI(:,1)=ROI_data{i}.ROI(:,1)-range(2,1);
+            ROI_data{i}.ROI(:,2)=ROI_data{i}.ROI(:,2)-range(1,1);
+        end
+    end
+
+    % make new image to display
+    im = makeImage(data, im_ind, z, thresholds, chn);
+
+    while cont==1
+
+        % draw image of current channel
+        hold off; clf;
+        imshow(im, 'In', mag); hold on;
+
+        % plot draw VPC ROI
+        if ~isempty(ROI_data{z}.ROI)
+            outlineX=[ROI_data{z}.ROI(:,1); ROI_data{z}.ROI(1,1)];
+            outlineY=[ROI_data{z}.ROI(:,2); ROI_data{z}.ROI(1,2)];
+            plot(outlineX, outlineY, '-r');
+        end
+        title('Get VPC ROI');   
+
+        [x,y,but]=ginput(1);
+
+        if but==113 || but==101
+            % 'q' - move up in stack with DZ=1
+            % 'e' - move up in stack with DZ=5
+
+            % find step size
+            dz=1;
+            if but==101
+                dz=5;
+            end
+            % change z coordinate
+            z=z-dz;
+            if z<1
+                z=1;
+            end
+
+            % make new image to display
+            im = makeImage(data, im_ind, z, thresholds, chn);
+
+        elseif but==119 || but==114
+            % 'w' - move down in stack with DZ=1
+            % 'r' - move down in stack with DZ=5
+
+            % find step size
+            dz=1;
+            if but==114
+                dz=5;
+            end
+            % change z coordinate
+            z=z+dz;
+            if z>Nz
+                z=Nz;
+            end
+
+            % make new image to display
+            im = makeImage(data, im_ind, z, thresholds, chn);
+
+        elseif but==122 || but==120 || but == 99 || but == 118 || but == 98
+            % 'z','x','c' - change channel to 1,2 or 3.
+
+            % change channel
+            if but==122
+                chn=1;
+            elseif but==120
+                chn=2;
+            elseif but==99
+                if length(data)>=3
+                    chn=3;
+                end
+            elseif but==118
+                chn=0;
+            elseif but==98
+                chn=-1;
+            end
+
+            % make new image to display
+            im = makeImage(data, im_ind, z, thresholds, chn);
+
+        elseif but==1
+            % 'LMB' - add ROI point
+
+            ROI_data{z}.ROI(end+1,:)=[x; y];
+        elseif but==3
+            % 'RMB' - delete ROI point
+
+            ROI_data{z}.ROI(end,:)=[];
+        elseif but==61
+            % '+' - copy ROI from slice above
+            if z>1
+                ROI_data{z}.ROI=ROI_data{z-1}.ROI;
+            end
+
+        elseif but==45
+            % '_' - copy ROI from slice above
+            if z<Nz
+                ROI_data{z}.ROI=ROI_data{z+1}.ROI;
+            end
+
+        elseif but==127
+            % 'de' - copy ROI from slice above
+            if z<Nz
+                ROI_data{z}.ROI=ROI_data{z+1}.ROI;
+            end
+
+        elseif but==27
+            % 'ESC' - quit
+
+            close(gcf);
+            cont=0;
+        end
+
+    end
+
+    %% change coordinates back to those in full image
+    for i=1:Nz
+        if ~isempty(ROI_data{i}.ROI)
+            ROI_data{i}.ROI(:,1)=ROI_data{i}.ROI(:,1)+range(2,1);
+            ROI_data{i}.ROI(:,2)=ROI_data{i}.ROI(:,2)+range(1,1);
+        end
+    end
+
+end
+
+function im = makeImage(data, im_ind, z, thresholds, chn)  
+
+    if chn>0
+        th=stretchlim(data(chn).im(im_ind{1},im_ind{2},z), thresholds(chn));
+        im=imadjust(data(chn).im(im_ind{1},im_ind{2},z), th,[]);
+    elseif chn==0
+        % chn=0: combine A594 and Cy5 channels
+        for q=1:2
+            c=q+1;
+            th=stretchlim(data(c).im(im_ind{1},im_ind{2},z), thresholds(c));
+            tmp(:,:,q)=imadjust(data(c).im(im_ind{1},im_ind{2},z), th,[]);
+        end
+        im=makeRGB(mat2gray(tmp(:,:,1)), mat2gray(tmp(:,:,2)),[]);
+    elseif chn==-1
+        % chn=-1: combine DAPI, A594 and Cy5 channels
+        for q=1:3
+            c=q;
+            th=stretchlim(data(c).im(im_ind{1},im_ind{2},z), thresholds(c));
+            tmp(:,:,q)=imadjust(data(c).im(im_ind{1},im_ind{2},z), th,[]);
+        end
+        im=makeRGB(mat2gray(tmp(:,:,2)), mat2gray(tmp(:,:,3)), mat2gray(tmp(:,:,1)) );
+    end
+        
+end

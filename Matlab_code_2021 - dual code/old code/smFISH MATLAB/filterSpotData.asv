@@ -1,0 +1,123 @@
+%%
+function filterSpotData (n_expt, path, channels) 
+%%
+
+extension=['.tif'];
+
+n_expt=1;
+
+%% load annotation data
+ana_path=[path '/analyzed/'];
+
+%% make ROI and find bounds within full image
+
+% read in all the different ROIs and make total ROI
+ROInames='AC_ROI';
+
+% load AC ROI data
+infile=sprintf('%s%s%04d.mat', ana_path, ROInames, n_expt);
+load(infile, 'ROI_data');
+    
+
+% find largest bounding box that contains the ROIs for all slices, use this
+% bounding box to crop full images
+
+im_ROI=zeros(1024,1024);
+for i=1:length(ROI_data)
+    if ~isempty(ROI_data{i}.ROI)
+        % construct ROI polygon
+        tmp=roipoly(1024, 1024, ROI_data{i}.ROI(:,1), ROI_data{i}.ROI(:,2));
+        % add ROI polygon to total ROI polygon
+        im_ROI=im_ROI|tmp;
+    end
+end
+
+% crop ROI and find cropping coordinates
+tmp=bwlabel(im_ROI);
+rp=regionprops(tmp, 'BoundingBox');
+ROI_BB=round(rp(1).BoundingBox);
+
+clear tmp;
+
+%%
+H = -fspecial('log',15,1.5);
+
+for chn=1 %:length(channels)
+    for z=9
+        if ~isempty(ROI_data{z}.ROI)
+            
+            % read image
+            infile=sprintf(['%s%03d' extension], channels{chn}, n_expt);
+            tmp = tiffread27([path '/' infile], z);
+
+            % construct ROI polygon
+            mask=roipoly(1024, 1024, ROI_data{z}.ROI(:,1), ROI_data{z}.ROI(:,2));
+            mask=imcrop(mask, ROI_BB);
+            
+            % crop original image
+            im=imcrop(tmp.data, ROI_BB);
+            % filter image
+            im=imfilter(im,H,'replicate');
+            % only select those pixels within the ROI
+            im=im.*uint16(mask);
+            
+            % save result
+            data_filtered(chn).im(:,:,z) = im;
+        else
+            % if no ROI in this slice, just have empty image
+            data_filtered(chn).im(:,:,z)=zeros(size(im_ROI));
+        end
+            imshow(mat2gray(im3), 'In', 300)
+
+
+    end
+    
+end
+
+%% load stacks of all channels
+
+for i=1:length(channels)
+    infile=sprintf(['%s%03d' extension], channels{i}, n_expt);
+    
+    fprintf('\t#%d -- Reading imaging data: %s\n', n_expt, infile); 
+    
+    tmp = tiffread27([path '/' infile]);
+    for j=1:length(tmp)
+        data(i).im(:,:,j) = imcrop(tmp(j).data, ROI_BB);
+    end
+end
+
+% clear tmp i
+
+%% apply log filter to amplify spots
+
+fprintf('\t#%d -- Applying log filter\n', n_expt); 
+
+H = -fspecial('log',15,1.5);
+for i=1:length(channels)
+    fprintf('\t\t %s: ', channels{i}); 
+    for j=1:size(data(1).im,3)
+        data_filtered(i).im(:,:,j) = imfilter(data(i).im(:,:,j),H,'replicate');
+        fprintf('.'); 
+    end
+    fprintf('\n'); 
+end
+
+%%
+for z=9 %1:30
+
+chn=1;
+subplot(2,1,1), imshow(mat2gray(data(chn).im(:,:,z)), 'Initial', 300)
+subplot(2,1,2), imshow(mat2gray(data_filtered(chn).im(:,:,z)), 'Initial', 300)
+
+getframe,
+
+end
+%% save filtered data and spot histograms
+
+fprintf('\t#%d -- Saving data\n\n', n_expt);
+
+outfile=sprintf('filteredSpotData%04d.mat', n_expt);
+% save([ana_path outfile], 'data_filtered', 'spotHist', 'maxIntensity');
+save([ana_path outfile], 'data_filtered');
+
